@@ -4,7 +4,9 @@
 
 ### Project Overview
 
-My research project focuses on the development of a 3D phase field model to simulate crystal growth using the Chemical Vapor Deposition (CVD) method. The primary computational technique employed is the Finite Element Method (FEM), which discretizes continuous models to enable numerical simulations. A key aspect of this project is the use of Adaptive Mesh Refinement (AMR) to repeatedly refine the elements in the surface regions in the domain, leading to variations in computational load as the surface area of the model changes. This dynamic refinement presents challenges in efficiently allocating computational resources.
+My research project focuses on the development of a 3D phase field model to simulate crystal growth using the Chemical Vapor Deposition (CVD) method. The primary computational technique employed is the Finite Element Method (FEM), which discretizes continuous models to enable numerical simulations. 
+
+A key aspect of this project is the use of Adaptive Mesh Refinement (AMR) to repeatedly refine the elements in the surface regions in the domain, leading to variations in computational load as the surface area of the model changes. This dynamic refinement presents challenges in efficiently allocating computational resources.
 
 ### Objectives
 
