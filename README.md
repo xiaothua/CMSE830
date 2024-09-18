@@ -20,7 +20,7 @@ This dataset contains detailed statistics on global electricity production, with
 
 The two datasets complement each other by providing a full picture of how energy consumption patterns have changed globally. The electricity statistics help understand the production and supply side, while the sustainable energy dataset offers a view into the consumption and environmental impact.
 
-### Key Features
+### Key Features (waiting for updating)
 
 - **3D Phase Field Modeling**: Simulation of crystal growth using FEM.
 - **Adaptive Mesh Refinement (AMR)**: Dynamic adjustment of mesh elements to accurately model surface changes, influencing computational demands.
