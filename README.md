@@ -1,16 +1,24 @@
 # CMSE830 Midterm Project
 
-## Exploring Efficient Computational Strategies through Interaction and Visualization
+## Global Energy and Electricity Production Analysis (2000-2020)
 
 ### Project Overview
 
-My research project focuses on the development of a 3D phase field model to simulate crystal growth using the Chemical Vapor Deposition (CVD) method. The primary computational technique employed is the Finite Element Method (FEM), which discretizes continuous models to enable numerical simulations. 
+This project aims to explore global trends in energy consumption and electricity production from 2000 to 2020. By using two comprehensive datasets, I analyze how the global transition toward sustainable energy sources has impacted electricity generation across different countries and regions. The interactive visualizations in this project provide users with an intuitive understanding of energy consumption patterns and how nations have embraced renewable energy to address global environmental challenges.
 
-A key aspect of this project is the use of Adaptive Mesh Refinement (AMR) to repeatedly refine the elements in the surface regions in the domain, leading to variations in computational load as the surface area of the model changes. This dynamic refinement presents challenges in efficiently allocating computational resources.
+### Datasets
 
-### Objectives
+This project utilizes the following datasets:
 
-The goal of this project is to compare CPU and memory usage as well as the corresponding computation time across different model sizes and other parameters. Additionally, the project will evaluate the computational efficiency of different CPUs available in the HPCC. Given the numerous parameters that need to be considered, employing interactive and visual methods for data analysis and interpretation is expected to be an effective approach for deriving conclusions.
+**1.	Global Data on Sustainable Energy (2000-2020):**
+
+This dataset provides indicators related to sustainable energy usage across different countries, including electricity access, renewable energy adoption, carbon emissions, and energy intensity. It covers key factors that are essential to understanding the progress towards sustainable energy development.
+
+**2.	Global Electricity Statistics (1980-2021):**
+
+This dataset contains detailed statistics on global electricity production, with a focus on the different sources of electricity, including fossil fuels and renewables. It also provides insights into energy generation capacity and total electricity consumption by country.
+
+The two datasets complement each other by providing a full picture of how energy consumption patterns have changed globally. The electricity statistics help understand the production and supply side, while the sustainable energy dataset offers a view into the consumption and environmental impact.
 
 ### Key Features
 
@@ -18,7 +26,7 @@ The goal of this project is to compare CPU and memory usage as well as the corre
 - **Adaptive Mesh Refinement (AMR)**: Dynamic adjustment of mesh elements to accurately model surface changes, influencing computational demands.
 - **Performance Comparison**: Analysis of CPU and memory consumption, along with computation time, across various model sizes and configurations.
 - **Cross-Platform Efficiency Evaluation**: Comparison of different CPU resources that HPCC provided to identify the most efficient computational strategy.
-- **Interactive Visualization**: Utilization of interactive visualizations to explore the complex relationships between model parameters, computational resources, and performance outcomes.
+- **Interactive Visualization**: 
 
 ### Usage
 
