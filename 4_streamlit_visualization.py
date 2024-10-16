@@ -26,7 +26,7 @@ except FileNotFoundError:
 st.set_page_config(page_title="Electricity and Economy Analysis", page_icon="📊", layout="wide")
 
 # Sidebar for page navigation
-page = st.sidebar.selectbox("Choose a page", ["Overview", "Data Analysis", "Imputation"])
+page = st.sidebar.selectbox("Choose a page", ["Overview", "Data Analysis", "Imputation", "Conclusion"])
 
 # Page 1: Project Overview
 if page == "Overview":
@@ -858,3 +858,12 @@ elif page == "Imputation":
 
     st.write("In the heatmap, GDP growth rate correlation with electricity data shifted from weak to strong. Other features also show heightened correlations, indicating further amplification of existing trends.")
 
+elif page == "Conclusion":
+    st.title("Summary")
+    st.write("## Electricity Strategies")
+    st.write("Most countries adopt a self-sufficient electricity strategy, particularly among the very large and very small economies. Exporting countries within low- and middle-income brackets tend to have relatively higher per capita electricity infrastructure and generation capacity, along with higher distribution losses. This distinction is less evident among high-income nations.")
+
+    st.write("Self-sufficient countries show a more balanced economic distribution. In these countries, high-income nations make up a larger share, though their income median is lower, while low-income nations form a smaller share but have a higher income median.")
+
+    st.write("## Regional complementarity")
+    st.write("Regional electricity complementarity often appears among lower-income countries, with one country relying on its neighbor's power supply. However, the Nordic countries are an exception, showing flexibility and frequency in switching between importer and exporter roles.")
