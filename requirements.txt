@@ -2,7 +2,6 @@ streamlit
 pandas
 numpy
 requests
-StringIO
 seaborn
 matplotlib
 scipy
