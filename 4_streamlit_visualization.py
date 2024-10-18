@@ -36,10 +36,10 @@ if page == "Overview":
     st.write("1) Explore the correlation between global economic data and electricity data to identify the representative features.")
     st.write("2) Examine differences in electricity strategies across countries at different economic stages.")
 
-    st.write("### Let's get Familiar with the Data!")
+    st.write("### Let's get Familiar with the Data First!")
     st.write("### Global Electrical Data")
     # Sidebar selection for country if data is not empty
-    selected_country = None
+    selected_country = "United States"
     if not data_imputation.empty:
         selected_country = st.sidebar.selectbox("Select a country", sorted(data_imputation.index.get_level_values(0).unique()))
 
@@ -100,6 +100,8 @@ if page == "Overview":
     fig.update_yaxes(automargin=True, range=[net_consumption.min() * 0.9, (net_consumption + exports + distribution_losses).max() * 1.1])
 
     st.plotly_chart(fig)
+    st.caption("Do these declines related to some financial events?") 
+    st.caption("Such as, 1997: Asia Financial Crisis, 2008: Global Financial Crisis, 2020: COVID-19 Pandemic.")
 
     # Add Economic Data Plots
     st.write("### Global Economic Data")
@@ -377,6 +379,9 @@ if page == "Overview":
 
     st.write("## Some Hypothesis")
     st.image("img/hypothesis.png")
+
+    st.write("### PS:")
+    st.write("This Streamlit webpage focuses more on providing a complete storytelling experience for audiences without a relevant background. For more details, please visit my repository to view the related .ipynb code.")
 
 # Page 2: Correlation Analysis
 elif page == "Data Analysis":
