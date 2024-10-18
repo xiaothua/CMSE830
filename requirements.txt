@@ -1,11 +1,10 @@
-streamlit
 pandas
-numpy
 requests
-StringIO
+numpy
 seaborn
 matplotlib
 scipy
 plotly
 pycountry
-sklearn
+scikit-learn
+streamlit
