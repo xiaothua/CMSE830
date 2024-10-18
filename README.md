@@ -52,3 +52,12 @@ Most countries adopt a self-sufficient electricity strategy, particularly among 
 Self-sufficient countries show a more balanced economic distribution. In these countries, high-income nations make up a larger share, though their income median is lower, while low-income nations form a smaller share but have a higher income median.
 
 Regional electricity complementarity often appears among lower-income countries, with one country relying on its neighbor’s power supply. However, the Nordic countries are an exception, showing flexibility and frequency in switching between importer and exporter roles.
+
+### AI Usage
+Almost all the code was completed by ChatGPT-4o Canvas. My job is to explain the logic and functionality of the code in human language and check for errors in the code for correction.
+
+Even the parts I wrote myself heavily relied on Copilot in VSCode for code completion. 
+
+Without AI assistance, I could still complete the project, but it would be impossible to write so much code in such a short amount of time.
+
+
