@@ -102,6 +102,7 @@ if page == "Overview":
     st.plotly_chart(fig)
     st.caption("Do these declines related to some financial events?") 
     st.caption("Such as, 1997: Asia Financial Crisis, 2008: Global Financial Crisis, 2020: COVID-19 Pandemic.")
+    st.caption("The impact of these events is more evident in some of the more globalized economies, such as the United States, the United Kingdom, France, Japan, etc.")
 
     # Add Economic Data Plots
     st.write("### Global Economic Data")
