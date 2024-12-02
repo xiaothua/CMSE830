@@ -9,42 +9,59 @@ from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
-# import pycountry
+from statsmodels.tsa.api import VAR
+from functools import reduce
+from sklearn.linear_model import MultiTaskLassoCV
 
 # Load data
 try:
-    data_imputation = pd.read_csv('data_imputation.csv', index_col=[0, 1])
+    data_imputation_full = pd.read_csv('data_imputation_full.csv', index_col=[0, 1])
     data_cleaned = pd.read_csv('data_cleaned.csv', index_col=[0, 1])
 except FileNotFoundError:
     st.error("The csv file could not be found. Please make sure it is available in the same directory.")
-    data_imputation = pd.DataFrame()
+    data_imputation_full = pd.DataFrame()
     data_cleaned = pd.DataFrame()
 
 # 1. Set up Streamlit app with multiple pages
 st.set_page_config(page_title="Electricity and Economy Analysis", page_icon="📊", layout="wide")
 
 # Sidebar for page navigation
-page = st.sidebar.selectbox("Choose a page", ["Overview", "Data Analysis", "Imputation", "Conclusion"])
+page = st.sidebar.selectbox("Choose a page", ["✅ Overview", "📊 Data Analysis", "📊 Imputation", "📊 Summary (Midterm)", "🤖 AR Model", "🤖 Lasso Model", "🤖 Other Models", "🤖 Summary (Final)"])
 
 # Page 1: Project Overview
-if page == "Overview":
+if page == "✅ Overview":
     st.title("Overview")
-    st.write("## Exploring the Correlation between Electricity and Economy")
+    st.write("## Predicting Economic Data Using Electricity and Population Data")
     st.write("The main goal:")
     st.write("1) Explore the correlation between global economic data and electricity data to identify the representative features.")
-    st.write("2) Examine differences in electricity strategies across countries at different economic stages.")
+    st.write("2) Train individual AR(p) and VAR(p) models for each country, and attempt to forecast GDP for the coming years.")
 
     st.write("### Let's get Familiar with the Data First!")
     st.write("### Global Electrical Data")
+
     # Sidebar selection for country if data is not empty
-    selected_country = "United States"
-    if not data_imputation.empty:
-        selected_country = st.sidebar.selectbox("Select a country", sorted(data_imputation.index.get_level_values(0).unique()))
+    if not data_imputation_full.empty:
+
+        countries = sorted(data_imputation_full.index.get_level_values(0).unique())
+        
+        # Set default country to United States if available
+        if "United States" in countries:
+            default_index = countries.index("United States")
+        else:
+            default_index = 0
+        
+        selected_country = st.sidebar.selectbox(
+            "Select a country",
+            countries,
+            index=default_index
+        )
+    else:
+        selected_country = "United States"
 
     # Filter data based on selected country
-    country_data = data_imputation.loc[selected_country]
+    country_data = data_imputation_full.loc[selected_country]
     years = [str(year) for year in range(1992, 2022)]
 
     # Extract data for each feature
@@ -176,6 +193,7 @@ if page == "Overview":
     )
 
     st.plotly_chart(economic_fig)
+    st.caption("GDP: gross domestic product, PPP: purchasing Power Parity.") 
 
     # Right subplot: GDP Per Capita, PPP Per Capita
     per_capita_fig = go.Figure()
@@ -213,8 +231,7 @@ if page == "Overview":
 
     # Display the features table
     st.write("## Features of the Datasets")
-    st.write("The original idea was that clicking options in the table would trigger corresponding changes in the data displayed on the map below. This part will be implemented in the final project.")
-    st.write(":(")
+    st.write("There is a high correlation among many features. We will explore the correlations later and batch-delete highly correlated features.")
 
     # Add a table to display the features of the two datasets
     electricity_features = [
@@ -232,30 +249,36 @@ if page == "Overview":
         'Economics: GDP',
         'Economics: GDP Growth',
         'Economics: PPP Per Capita',
-        'Economics: PPP (Purchasing Power Parity)',
+        'Economics: PPP',
         'Economics: PPP Growth'
+    ]
+
+    population_features = [
+        'Population: Population', 
+        'Population: Percentage', 
+        'Population: Area (km²)',
+        'Population: Growth Rate', 
+        'Population: Density'
     ]
 
     # Create a DataFrame to display the features
     data = {
+        "Economics Features": economics_features + [None] * (len(electricity_features) - len(economics_features)),
         "Electricity Features": electricity_features + [None] * (len(economics_features) - len(electricity_features)),
-        "Economics Features": economics_features + [None] * (len(electricity_features) - len(economics_features))
+        "Population Features": population_features + [None] * (len(electricity_features) - len(population_features))
     }
 
     features_df = pd.DataFrame(data)
     st.dataframe(features_df, use_container_width=True)
 
-    # Load data_imputation from CSV file
-    data_imputation = pd.read_csv('data_imputation.csv', index_col=[0, 1])
-
     # 3. Dividing the countries into 3 groups based on electricity import/export strategy
     # 3.1 Calculate net import ratio
     try:
-        net_imports = data_imputation.xs('Electricity: Net Imports', level=1)
-        net_generation = data_imputation.xs('Electricity: Net Generation', level=1).replace(0, np.nan)  # Avoid division by zero
+        net_imports = data_imputation_full.xs('Electricity: Net Imports', level=1)
+        net_generation = data_imputation_full.xs('Electricity: Net Generation', level=1).replace(0, np.nan)  # Avoid division by zero
         net_import_ratio = net_imports.div(net_generation)
     except KeyError:
-        st.error("The data_imputation DataFrame does not contain the necessary levels. Please check the input data.")
+        st.error("The data_imputation_full DataFrame does not contain the necessary levels. Please check the input data.")
 
     # 3.2 Function to plot the net import ratio on the world map for each year
     def plot_world_map(df, title):
@@ -363,7 +386,7 @@ if page == "Overview":
     # Plot maps
     try:
         fig1 = plot_world_map(net_import_ratio, 'Net Import Ratio Map with slider')
-        fig2 = plot_world_map(data_imputation.xs('Economics: GDP Per Capita', level=1), 'GDP per Capita with slider')
+        fig2 = plot_world_map(data_imputation_full.xs('Economics: GDP Per Capita', level=1), 'GDP per Capita with slider')
         
         # Display the figures side by side
         col1, col2 = st.columns(2)
@@ -385,7 +408,7 @@ if page == "Overview":
     st.write("This Streamlit webpage focuses more on providing a complete storytelling experience for audiences without a relevant background. For more details, please visit my repository to view the related .ipynb code.")
 
 # Page 2: Correlation Analysis
-elif page == "Data Analysis":
+elif page == "📊 Data Analysis":
     # Page: Correlation Analysis
     st.title("Data Analysis")
     st.write("## Heatmap")
@@ -395,13 +418,13 @@ elif page == "Data Analysis":
     # 2. Heatmap Analysis
     # 2.1 Calculate the total values for each feature across all countries
     # Sum the values for each feature independently
-    total_values = data_imputation.groupby(level=1).sum()
+    total_values = data_imputation_full.groupby(level=1).sum()
 
     # Calculate the correlation matrix for total values
     correlation_total = total_values.T.corr()
 
     # 2.2 Normalize data for each country to ensure equal weight for all countries
-    normalized_data = data_imputation.groupby(level=0).transform(lambda x: (x - x.min()) / (x.max() - x.min()))
+    normalized_data = data_imputation_full.groupby(level=0).transform(lambda x: (x - x.min()) / (x.max() - x.min()))
 
     # Calculate the average values for each feature across all countries after normalization
     average_normalized_values = normalized_data.groupby(level=1).mean()
@@ -413,18 +436,18 @@ elif page == "Data Analysis":
     fig, axes = plt.subplots(2, 3, figsize=(24, 16))
 
     # Extract different types of features
-    total_features = [col for col in data_imputation.index.levels[1] if not ('Per Capita' in col or 'Growth' in col)]
-    per_capita_features = [col for col in data_imputation.index.levels[1] if 'Per Capita' in col]
-    growth_features = [col for col in data_imputation.index.levels[1] if 'Growth' in col]
+    total_features = [col for col in data_imputation_full.index.levels[1] if not ('Per Capita' in col or 'Growth' in col)]
+    per_capita_features = [col for col in data_imputation_full.index.levels[1] if 'Per Capita' in col]
+    growth_features = [col for col in data_imputation_full.index.levels[1] if 'Growth' in col]
 
     # Calculate correlation matrices for total, per capita, and growth features
     try:
-        total_corr = data_imputation.loc[(slice(None), total_features), :].groupby(level=1).sum().T.corr()
-        per_capita_corr = data_imputation.loc[(slice(None), per_capita_features), :].groupby(level=1).sum().T.corr()
+        total_corr = data_imputation_full.loc[(slice(None), total_features), :].groupby(level=1).sum().T.corr()
+        per_capita_corr = data_imputation_full.loc[(slice(None), per_capita_features), :].groupby(level=1).sum().T.corr()
 
-        gdp_values = data_imputation.xs('Economics: GDP', level=1)
+        gdp_values = data_imputation_full.xs('Economics: GDP', level=1)
         weights = gdp_values.div(gdp_values.sum(axis=0), axis=1)
-        growth_weighted_sum = data_imputation.loc[(slice(None), growth_features), :].mul(weights, level=0).groupby(level=1).sum()
+        growth_weighted_sum = data_imputation_full.loc[(slice(None), growth_features), :].mul(weights, level=0).groupby(level=1).sum()
         growth_corr = growth_weighted_sum.T.corr()
     except KeyError as e:
         st.error(f"An error occurred while calculating correlations: {e}")
@@ -488,8 +511,8 @@ elif page == "Data Analysis":
 
     # 4. Scatter Plot Analysis
     st.write("## Scatter Plot & Histogram")
-    net_imports = data_imputation.xs('Electricity: Net Imports', level=1)
-    net_generation = data_imputation.xs('Electricity: Net Generation', level=1).replace(0, np.nan)  # Avoid division by zero
+    net_imports = data_imputation_full.xs('Electricity: Net Imports', level=1)
+    net_generation = data_imputation_full.xs('Electricity: Net Generation', level=1).replace(0, np.nan)  # Avoid division by zero
     net_import_ratio = net_imports.div(net_generation)
 
     # 4.1 Classify energy status based on yearly net import ratio
@@ -531,11 +554,11 @@ elif page == "Data Analysis":
     switcher_countries = energy_status[energy_status == 'Frequent Import-Export Switcher'].index
     other_countries = energy_status[energy_status == 'Other'].index
 
-    data_importers = data_imputation.loc[importer_countries]
-    data_exporters = data_imputation.loc[exporter_countries]
-    data_self_sufficient = data_imputation.loc[self_sufficient_countries]
-    data_switchers = data_imputation.loc[switcher_countries]
-    data_others = data_imputation.loc[other_countries]
+    data_importers = data_imputation_full.loc[importer_countries]
+    data_exporters = data_imputation_full.loc[exporter_countries]
+    data_self_sufficient = data_imputation_full.loc[self_sufficient_countries]
+    data_switchers = data_imputation_full.loc[switcher_countries]
+    data_others = data_imputation_full.loc[other_countries]
 
     # 4.2 Plot
     # Define y-axis limits for each feature
@@ -686,7 +709,7 @@ elif page == "Data Analysis":
     # print(f"Other Countries: {len(other_countries)}")
 
     # 4.2 Calculate GDP per capita distribution for each group
-    gdp_per_capita = data_imputation.xs('Economics: GDP Per Capita', level=1)
+    gdp_per_capita = data_imputation_full.xs('Economics: GDP Per Capita', level=1)
 
     def calculate_gdp_distribution(group_data, year):
         thresholds = income_thresholds[year]
@@ -761,7 +784,7 @@ elif page == "Data Analysis":
     st.write("Exporters show the opposite trend, hinting at a possible link between electricity strategies and economic health.")
 
 # Page 3: Imputation
-elif page == "Imputation":
+elif page == "📊 Imputation":
     st.title("Data Cleaning and Imputation")
     st.write("## Linear Imputation")
 
@@ -864,7 +887,8 @@ elif page == "Imputation":
 
     st.write("In the heatmap, GDP growth rate correlation with electricity data shifted from weak to strong. Other features also show heightened correlations, indicating further amplification of existing trends.")
 
-elif page == "Conclusion":
+# Page 4: Summary (Midterm)
+if page == "📊 Summary (Midterm)":
     st.title("Summary")
     st.write("## Electricity Strategies")
     st.write("Most countries adopt a self-sufficient electricity strategy, particularly among the very large and very small economies. Exporting countries within low- and middle-income brackets tend to have relatively higher per capita electricity infrastructure and generation capacity, along with higher distribution losses. This distinction is less evident among high-income nations.")
@@ -873,3 +897,440 @@ elif page == "Conclusion":
 
     st.write("## Regional complementarity")
     st.write("Regional electricity complementarity often appears among lower-income countries, with one country relying on its neighbor's power supply. However, the Nordic countries are an exception, showing flexibility and frequency in switching between importer and exporter roles.")
+
+# Page 5: AR Model
+if page == "🤖 AR Model":
+    # load data
+    @st.cache_data
+    def load_data():
+        data_full = pd.read_csv('data_imputation_full.csv', index_col=[0, 1])
+        gdp_data = data_full.xs('Economics: GDP', level=1)
+        gdp_long = gdp_data.reset_index().melt(id_vars=['Country'], var_name='Year', value_name='GDP')
+        gdp_long['Year'] = gdp_long['Year'].astype(int)
+        evaluation_df = pd.read_csv('AR_evaluation.csv')
+        return gdp_long, evaluation_df
+
+    gdp_long, evaluation_df = load_data()
+
+    # define AR(p)
+    def fit_ar_p(data, p):
+        N = len(data)
+        if N <= p:
+            raise ValueError("Data length must be greater than lag order p")
+        A = np.column_stack([np.ones(N - p)] + [data[p - i - 1:N - i - 1] for i in range(p)])
+        b = data[p:]
+        beta, residuals, rank, s = np.linalg.lstsq(A, b, rcond=None)
+        return beta
+
+    def predict_ar_p(history, beta, p):
+        if len(history) < p:
+            raise ValueError("History length must be greater than lag order p")
+        feature = np.array([1] + history[-1:-p-1:-1])
+        prediction = np.dot(beta, feature)
+        return prediction
+
+    def forecast_future_gdp_manual(country, df, beta, p, steps=5):
+        try:
+            country_df = df[df['Country'] == country].sort_values('Year')
+            gdp = country_df['GDP'].values.tolist()
+            history = gdp.copy()
+            predictions = []
+            for _ in range(steps):
+                hist = history[-p:]
+                pred = predict_ar_p(hist, beta, p)
+                predictions.append(pred)
+                history.append(pred)
+            return predictions
+        except Exception as e:
+            st.error(f"{country}: GDP forecast failed. Error message: {e}")
+            return [None]*steps
+
+    # title
+    st.title("AR Model Analysis")
+    st.write("If we observe the changes in test set errors in the bar chart, most countries’ AR models show significant errors in 2020. This suggests that AR models may struggle to account for the impact of unexpected events (e.g., Covid-19, major economic policies, or regional wars).")
+    st.write("On the other hand, while this increases the error in economic forecasting, it could potentially be used to assess the stability of a country's development.")
+
+    # select country
+    countries = sorted(gdp_long['Country'].unique())
+    default_country = "United States" if "United States" in countries else countries[0]
+    selected_country = st.sidebar.selectbox("Select a country", countries, index=countries.index(default_country))
+
+    # select forecast steps
+    forecast_steps = st.sidebar.slider("Select number of forecast steps", min_value=1, max_value=10, value=5)
+
+    # show AR model evaluation results
+    country_results = evaluation_df[evaluation_df['Country'] == selected_country]
+    if country_results.empty:
+        st.error(f"No AR model found for {selected_country}.")
+    else:
+        row = country_results.iloc[0]
+        best_p = int(row['Best_p'])
+        mse = row['MSE']
+        mae = row['MAE']
+        r2 = row['R2']
+        beta_str = row['Beta']
+
+        beta = np.fromstring(beta_str.strip('[]'), sep=' ')
+
+        # display evaluation results
+        st.subheader(f"AR Model Evaluation for {selected_country}")
+        st.markdown(f"""
+        - **Best Lag Order (p-value):** {best_p}
+        - **Mean Squared Error (MSE):** {mse:.2e}
+        - **Mean Absolute Error (MAE):** {mae:.2e}
+        - **R² Score:** {r2:.2f}
+        """)
+
+        # plot
+        def plot_gdp_with_forecast(country, gdp_long, beta, p, forecast_steps):
+            try:
+                country_df = gdp_long[gdp_long['Country'] == country].sort_values('Year')
+                years_history = country_df['Year'].values
+                gdp_history = country_df['GDP'].values
+
+                # divide data into train and test sets
+                train_size = int(len(gdp_history) * 0.7)
+                train_years, test_years = years_history[:train_size], years_history[train_size:]
+                train_gdp, test_gdp = gdp_history[:train_size], gdp_history[train_size:]
+
+                # train AR model
+                history = list(train_gdp)
+                test_predictions = []
+                for actual in test_gdp:
+                    pred = predict_ar_p(history, beta, p)
+                    test_predictions.append(pred)
+                    history.append(actual)
+
+                # forecast future GDP
+                future_predictions = forecast_future_gdp_manual(country, gdp_long, beta, p, steps=forecast_steps)
+                forecast_years = np.arange(years_history.max() + 1, years_history.max() + 1 + forecast_steps)
+
+                errors = test_gdp - np.array(test_predictions)
+
+                # plot GDP with forecast
+                fig, ax = plt.subplots(figsize=(12, 6))
+                ax.plot(train_years, train_gdp, marker='o', label='Train Data')
+                ax.plot(test_years, test_gdp, marker='o', label='Test Data')
+                ax.plot(test_years, test_predictions, marker='o', linestyle='--', label='AR Model Predictions')
+                if future_predictions and not any(np.isnan(future_predictions)):
+                    ax.plot(forecast_years, future_predictions, marker='o', linestyle='--', label='Forecasted GDP')
+                ax.set_title(f"{country} GDP Forecast with AR Model (p={p})")
+                ax.set_xlabel("Year")
+                ax.set_ylabel("GDP (USD)")
+                ax.legend()
+                ax.grid(True)
+                st.pyplot(fig)
+
+                # plot prediction errors
+                fig2, ax2 = plt.subplots(figsize=(12, 4))
+                ax2.bar(test_years, errors)
+                ax2.set_title(f"{country} Prediction Errors (Test Data - Predictions)")
+                ax2.set_xlabel("Year")
+                ax2.set_ylabel("Error (USD)")
+                ax2.grid(True)
+                st.pyplot(fig2)
+
+                # # display forecasted GDP
+                # forecast_df = pd.DataFrame({
+                #     'Year': forecast_years,
+                #     'Forecasted GDP (USD)': future_predictions
+                # })
+                # st.subheader(f"Forecasted GDP for {country}")
+                # forecast_df['Forecasted GDP (USD)'] = forecast_df['Forecasted GDP (USD)'].apply(lambda x: f"{x:.2e}")
+                # st.dataframe(forecast_df)
+
+            except Exception as e:
+                st.error(f"Failed to plot GDP forecast for {country}. Error: {e}")
+
+        plot_gdp_with_forecast(selected_country, gdp_long, beta, best_p, forecast_steps)
+
+# Page 6: Lasso Model
+if page == "🤖 Lasso Models":
+
+    # Load data with caching to improve performance
+    @st.cache_data
+    def load_data():
+        data_full = pd.read_csv('data_imputation_full.csv', index_col=[0, 1])
+        selected_features_df = pd.read_csv('selected_features_per_country_elastic_net.csv')
+        return data_full, selected_features_df
+
+    data_full, selected_features_df = load_data()
+
+    # Extract countries and prepare data in long format
+    countries = selected_features_df['Country'].unique()
+    selected_features_long = selected_features_df.melt(id_vars='Country', value_name='Feature').dropna()
+
+    # Function to prepare data for each country
+    def prepare_country_data(country):
+        """
+        Prepare the data for a specific country.
+
+        Parameters:
+        - country: Name of the country.
+
+        Returns:
+        - data: DataFrame containing the selected features for the given country.
+        """
+        try:
+            # Get the selected features for the country
+            features = selected_features_long[selected_features_long['Country'] == country]['Feature'].tolist()
+
+            # Ensure 'Economics: GDP' is included
+            if 'Economics: GDP' not in features:
+                features.append('Economics: GDP')
+
+            data_frames = []
+            for feature in features:
+                try:
+                    feature_data = data_full.xs(feature, level=1)
+                    country_feature_data = feature_data.loc[feature_data.index == country]
+                    # Transpose the data to have years as index
+                    country_feature_data = country_feature_data.T
+                    # Rename the column to the feature name
+                    country_feature_data.columns = [feature]
+                    data_frames.append(country_feature_data)
+                except Exception:
+                    continue
+
+            if not data_frames:
+                return None
+
+            # Merge the data frames on the index (years)
+            data = reduce(lambda left, right: pd.merge(left, right, left_index=True, right_index=True, how='outer'), data_frames)
+            # Convert index to integer type (years)
+            data.index = data.index.astype(int)
+            data = data.sort_index()
+
+            # Convert index to DatetimeIndex for time series analysis
+            data.index = pd.to_datetime(data.index.astype(str), format='%Y')
+
+            return data
+        except Exception:
+            return None
+
+    # Function to create lagged features
+    def create_lagged_features(data, max_lag):
+        df = data.copy()
+        cols = df.columns
+        lagged_data = []
+        for lag in range(1, max_lag + 1):
+            shifted = df.shift(lag)
+            shifted.columns = [f'{col}_lag{lag}' for col in cols]
+            lagged_data.append(shifted)
+        lagged_df = pd.concat(lagged_data, axis=1)
+        combined_df = pd.concat([df, lagged_df], axis=1).dropna()
+        X = combined_df.iloc[:, len(cols):]
+        y = combined_df.iloc[:, :len(cols)]
+        return X, y
+
+    # Cache the processed results for each country
+    @st.cache_data
+    def process_country(country):
+        """
+        Process each country using MultiTaskLassoCV.
+
+        Parameters:
+        - country: Name of the country.
+
+        Returns:
+        - result: Dictionary containing model and data information for the country.
+        """
+        try:
+            data = prepare_country_data(country)
+            if data is None:
+                return None
+
+            max_lag = 5
+            X, y = create_lagged_features(data, max_lag)
+
+            # Standardize features
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+
+            # Train MultiTaskLassoCV model
+            model = MultiTaskLassoCV(cv=5)
+            model.fit(X_scaled, y)
+
+            # Generate future forecasts
+            forecast_steps = 10
+            forecasts = []
+            lagged_vars = X.iloc[-1].values
+
+            for step in range(forecast_steps):
+                lagged_vars_scaled = scaler.transform([lagged_vars])
+                y_pred = model.predict(lagged_vars_scaled)
+                forecasts.append(y_pred[0])
+                # Update lagged_vars with the new predictions
+                lagged_vars = np.roll(lagged_vars, -y.shape[1])
+                lagged_vars[-y.shape[1]:] = y_pred[0]
+
+            forecasts = np.array(forecasts)
+            future_years = pd.date_range(start=pd.Timestamp(data.index[-1].year + 1, 1, 1), periods=forecast_steps, freq='YS')
+            forecast_df = pd.DataFrame(forecasts, index=future_years, columns=y.columns)
+
+            # Extract GDP forecast
+            target_col = 'Economics: GDP' if 'Economics: GDP' in data.columns else 'GDP'
+            gdp_forecast = forecast_df[[target_col]].reset_index()
+            gdp_forecast.columns = ['Year', 'GDP_Forecast']
+            gdp_forecast['Country'] = country
+            gdp_forecast['Year'] = gdp_forecast['Year'].dt.year
+            gdp_forecast = gdp_forecast[['Country', 'Year', 'GDP_Forecast']]
+
+            return {
+                'Country': country,
+                'Model': model,
+                'Scaler': scaler,
+                'Lag_Order': max_lag,
+                'Data': data,
+                'Target_Col': target_col,
+                'GDP_Forecast': gdp_forecast,
+                'X': X,
+                'y': y
+            }
+        except Exception as e:
+            st.error(f"{country}: Error in process_country: {e}")
+            return None
+
+    # Process all countries and cache the results
+    @st.cache_data
+    def process_all_countries(countries):
+        results = []
+        for country in countries:
+            result = process_country(country)
+            if result is not None:
+                results.append(result)
+        return results
+
+    # Get the processed results
+    results = process_all_countries(countries)
+
+    # Get the list of available countries
+    available_countries = [res['Country'] for res in results]
+
+    # Function to plot results and display evaluation metrics
+    def plot_lasso_forecast(country, forecast_steps=5):
+        try:
+            # Find the country result
+            country_result = next((res for res in results if res['Country'] == country), None)
+            if country_result is None:
+                st.warning(f"{country}: Data not available.")
+                return
+
+            data = country_result['Data']
+            target_col = country_result['Target_Col']
+            model = country_result['Model']
+            scaler = country_result['Scaler']
+            max_lag = country_result['Lag_Order']
+            X = country_result['X']
+            y = country_result['y']
+
+            # Split data into training and testing sets
+            train_size = int(len(X) * 0.7)
+            X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
+            y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
+
+            X_train_scaled = scaler.transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
+
+            # Predict on test set
+            y_pred = model.predict(X_test_scaled)
+
+            # Calculate evaluation metrics on test set
+            y_true = y_test[target_col].values
+            y_pred_target = y_pred[:, y.columns.get_loc(target_col)]
+            mse = mean_squared_error(y_true, y_pred_target)
+            mae = mean_absolute_error(y_true, y_pred_target)
+            r2 = r2_score(y_true, y_pred_target)
+
+            # Display evaluation metrics
+            st.subheader(f"Model Evaluation for {country}")
+            st.markdown(f"""
+            - **Mean Squared Error (MSE):** {mse:.2e}
+            - **Mean Absolute Error (MAE):** {mae:.2e}
+            - **R² Score:** {r2:.2f}
+            """)
+
+            # Generate future forecasts
+            forecasts = []
+            lagged_vars = X.iloc[-1].values
+
+            for step in range(forecast_steps):
+                lagged_vars_scaled = scaler.transform([lagged_vars])
+                y_future_pred = model.predict(lagged_vars_scaled)
+                forecasts.append(y_future_pred[0])
+                # Update lagged_vars with the new predictions
+                lagged_vars = np.roll(lagged_vars, -y.shape[1])
+                lagged_vars[-y.shape[1]:] = y_future_pred[0]
+
+            forecasts = np.array(forecasts)
+            future_years = pd.date_range(start=pd.Timestamp(data.index[-1].year + 1, 1, 1), periods=forecast_steps, freq='YS')
+            future_forecast_df = pd.DataFrame(forecasts, index=future_years, columns=y.columns)
+
+            # Extract GDP forecast
+            forecast_gdp = future_forecast_df[[target_col]].reset_index()
+            forecast_gdp.columns = ['Year', 'Forecasted GDP']
+            forecast_gdp['Year'] = forecast_gdp['Year'].dt.year
+
+            # Plot GDP over time
+            plt.figure(figsize=(12, 6))
+            plt.plot(y_train.index.year, y_train[target_col], marker='o', label='Train Data')
+            plt.plot(y_test.index.year, y_test[target_col], marker='o', label='Test Data')
+            plt.plot(y_test.index.year, y_pred_target, marker='o', linestyle='--', label='Lasso Model Predictions')
+            plt.plot(forecast_gdp['Year'], forecast_gdp['Forecasted GDP'], marker='o', linestyle='--', label='Future GDP Forecast')
+            plt.title(f'{country} GDP with Lasso Model Predictions and Forecast')
+            plt.xlabel('Year')
+            plt.ylabel('GDP (USD)')
+            plt.legend()
+            plt.grid(True)
+            st.pyplot(plt.gcf())
+            plt.clf()
+
+            # Calculate prediction errors
+            errors = y_true - y_pred_target
+
+            # Plot prediction errors
+            plt.figure(figsize=(12, 4))
+            plt.bar(y_test.index.year, errors, color='orange')
+            plt.title(f'{country} Prediction Errors (Test Data - Predictions)')
+            plt.xlabel('Year')
+            plt.ylabel('Error (USD)')
+            plt.grid(True)
+            st.pyplot(plt.gcf())
+            plt.clf()
+
+            # # Plot future GDP forecast
+            # plt.figure(figsize=(12, 4))
+            # plt.plot(forecast_gdp['Year'], forecast_gdp['Forecasted GDP'], marker='o', linestyle='--', label='Future GDP Forecast')
+            # plt.title(f'{country} Future GDP Forecast')
+            # plt.xlabel('Year')
+            # plt.ylabel('GDP')
+            # plt.legend()
+            # plt.grid(True)
+            # st.pyplot(plt.gcf())
+            # plt.clf()
+
+        except Exception as e:
+            st.error(f"{country}: Plot failed. Error: {e}")
+
+    # Page title and description
+    st.title("Lasso Model Analysis 🤖")
+    st.write("Analyze GDP forecasting using Lasso regression models.")
+
+    # Sidebar country selector
+    default_country = 'United States' if 'United States' in available_countries else available_countries[0]
+    selected_country = st.sidebar.selectbox("Select a country", available_countries, index=available_countries.index(default_country))
+
+    # Sidebar forecast steps
+    forecast_steps = st.sidebar.slider("Select number of forecast steps", min_value=1, max_value=10, value=5)
+
+    # Plot Lasso forecast and display evaluation metrics
+    plot_lasso_forecast(selected_country, forecast_steps=forecast_steps)
+
+# Page 7: Other Models
+if page == "🤖 Other Models":
+    st.title("Other Models")
+
+# Page 8: Summary (Final)
+elif page == "🤖 Summary (Final)":
+    st.title("Summary")
+
