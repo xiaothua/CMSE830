@@ -8,7 +8,7 @@ pycountry
 requests
 scipy
 seaborn
-sklearn
+scikit-learn
 statsmodels
 streamlit
 warnings
