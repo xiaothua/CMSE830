@@ -2,7 +2,6 @@ ipywidgets
 joblib
 matplotlib
 numpy
-os
 pandas
 plotly
 pycountry
