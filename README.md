@@ -48,7 +48,7 @@ Population data encompasses total population, growth rate, and global population
 
 ### Usage
 
-This project is implemented using [Streamlit](https://streamlit.io/), allowing users to interact with the simulation data and explore various scenarios. The app provides real-time visualizations and analysis tools to help users identify the most efficient computational strategies for their specific needs.
+This project is implemented using [Streamlit](https://cmse830-xh.streamlit.app), allowing users to interact with the simulation data and explore various scenarios. The app provides real-time visualizations and analysis tools to help users identify the most efficient computational strategies for their specific needs.
 
 ### AI Usage
 Almost all the code was completed by ChatGPT-4o and GPT-o1. My job is to explain the logic and functionality of the code in human language and check for errors in the code for correction.
