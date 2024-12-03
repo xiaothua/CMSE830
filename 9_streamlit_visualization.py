@@ -7,13 +7,15 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, MultiTaskLassoCV, LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.api import VAR
 from functools import reduce
-from sklearn.linear_model import MultiTaskLassoCV
+import os
+from sklearn.decomposition import PCA
+from sklearn.ensemble import RandomForestRegressor
 
 # Load data
 try:
@@ -28,7 +30,7 @@ except FileNotFoundError:
 st.set_page_config(page_title="Electricity and Economy Analysis", page_icon="📊", layout="wide")
 
 # Sidebar for page navigation
-page = st.sidebar.selectbox("Choose a page", ["✅ Overview", "📊 Data Analysis", "📊 Imputation", "📊 Summary (Midterm)", "🤖 AR Model", "🤖 Lasso Model", "🤖 Other Models", "🤖 Summary (Final)"])
+page = st.sidebar.selectbox("Choose a page", ["✅ Overview", "📊 Data Analysis", "📊 Imputation", "📊 Summary (Midterm)", "🤖 AR Model", "🤖 LASSO Model", "🤖 Other Models", "🤖 Summary (Final)"])
 
 # Page 1: Project Overview
 if page == "✅ Overview":
@@ -36,7 +38,7 @@ if page == "✅ Overview":
     st.write("## Predicting Economic Data Using Electricity and Population Data")
     st.write("The main goal:")
     st.write("1) Explore the correlation between global economic data and electricity data to identify the representative features.")
-    st.write("2) Train individual AR(p) and VAR(p) models for each country, and attempt to forecast GDP for the coming years.")
+    st.write("2) Train individual AR and LASSO models for each country, and attempt to forecast GDP for the coming years.")
 
     st.write("### Let's get Familiar with the Data First!")
     st.write("### Global Electrical Data")
@@ -397,12 +399,20 @@ if page == "✅ Overview":
     except Exception as e:
         st.error(f"An error occurred while plotting the maps: {e}")
 
-    st.write("## Data Structure")
-    st.write("The data is organized using a multi-index structure, resembling a four-dimensional matrix where each entry corresponds to a specific value based on country, feature, and year.")
-    st.image("img/data_structure.png")
+    st.write('''
+    ### Hints:
+             
+    The final project focus on the training results of AR and LASSO models for predicting GDP.
+    
+    Why GDP instead of per capita GDP? This will be discussed later.
+    
+    Why choose the LASSO model? And what exactly is LASSO? We'll dive into that too.
 
-    st.write("## Some Hypothesis")
-    st.image("img/hypothesis.png")
+
+    I trained each model individually for every country, which means this project involved training over 300 models.
+             
+    To improve efficiency, I used parallel computing. While AR models require minimal computation and don't benefit much from this approach, the advantages of parallel computing become evident when training LASSO model in batches.
+    ''')
 
     st.write("### PS:")
     st.write("This Streamlit webpage focuses more on providing a complete storytelling experience for audiences without a relevant background. For more details, please visit my repository to view the related .ipynb code.")
@@ -884,8 +894,9 @@ elif page == "📊 Imputation":
     st.pyplot(fig)
 
     st.write("With data-deficient countries removed, the analysis focuses mainly on upper-middle-income countries, leading to potential underrepresentation of their characteristics.")
-
     st.write("In the heatmap, GDP growth rate correlation with electricity data shifted from weak to strong. Other features also show heightened correlations, indicating further amplification of existing trends.")
+
+    st.write("**PS**: I experimented with other plotting styles, such as box plots and scatter plots. While scatter plots are good, my data points are too densely clustered, with significant overlap, making it difficult to discern differences. Personally, I still prefer violin plots.")
 
 # Page 4: Summary (Midterm)
 if page == "📊 Summary (Midterm)":
@@ -1011,10 +1022,10 @@ if page == "🤖 AR Model":
                 fig, ax = plt.subplots(figsize=(12, 6))
                 ax.plot(train_years, train_gdp, marker='o', label='Train Data')
                 ax.plot(test_years, test_gdp, marker='o', label='Test Data')
-                ax.plot(test_years, test_predictions, marker='o', linestyle='--', label='AR Model Predictions')
+                ax.plot(test_years, test_predictions, marker='o', linestyle='--', label='Predictions')
                 if future_predictions and not any(np.isnan(future_predictions)):
-                    ax.plot(forecast_years, future_predictions, marker='o', linestyle='--', label='Forecasted GDP')
-                ax.set_title(f"{country} GDP Forecast with AR Model (p={p})")
+                    ax.plot(forecast_years, future_predictions, marker='o', linestyle='--', label='Forecasts')
+                ax.set_title(f"{country} GDP Forecast with AR Model")
                 ax.set_xlabel("Year")
                 ax.set_ylabel("GDP (USD)")
                 ax.legend()
@@ -1030,219 +1041,79 @@ if page == "🤖 AR Model":
                 ax2.grid(True)
                 st.pyplot(fig2)
 
-                # # display forecasted GDP
-                # forecast_df = pd.DataFrame({
-                #     'Year': forecast_years,
-                #     'Forecasted GDP (USD)': future_predictions
-                # })
-                # st.subheader(f"Forecasted GDP for {country}")
-                # forecast_df['Forecasted GDP (USD)'] = forecast_df['Forecasted GDP (USD)'].apply(lambda x: f"{x:.2e}")
-                # st.dataframe(forecast_df)
+                st.subheader('Interesting Findings')
+                st.write('I call the errors caused by COVID-19 as "2020 forecasting nightmare" because the sudden economic downturn in most countries that year led to significant prediction errors.')
+                st.write("However, some countries remained exceptions, such as Denmark, Sweden, and Finland. Factors like population density and climate may have contributed to their economies being less severely affected by COVID-19, resulting in more stable forecasting outcomes. Fortunately, I have incorporated population density into subsequent model.")
+                st.write('On the other hand, the forecasts for developing countries seemed overly optimistic, such as Vietnam, China, and Philippines. In reality, economic growth has an upper limit, but this is purely a mathematical model. Ignoring economic principles may lead to distorted predictions.')
 
             except Exception as e:
                 st.error(f"Failed to plot GDP forecast for {country}. Error: {e}")
 
         plot_gdp_with_forecast(selected_country, gdp_long, beta, best_p, forecast_steps)
 
-# Page 6: Lasso Model
-if page == "🤖 Lasso Models":
+# Page 6: LASSO Model
+if page == "🤖 LASSO Model":
+    
+    data_folder = "Lasso"
 
-    # Load data with caching to improve performance
+    # load data
     @st.cache_data
-    def load_data():
-        data_full = pd.read_csv('data_imputation_full.csv', index_col=[0, 1])
-        selected_features_df = pd.read_csv('selected_features_per_country_elastic_net.csv')
-        return data_full, selected_features_df
-
-    data_full, selected_features_df = load_data()
-
-    # Extract countries and prepare data in long format
-    countries = selected_features_df['Country'].unique()
-    selected_features_long = selected_features_df.melt(id_vars='Country', value_name='Feature').dropna()
-
-    # Function to prepare data for each country
-    def prepare_country_data(country):
-        """
-        Prepare the data for a specific country.
-
-        Parameters:
-        - country: Name of the country.
-
-        Returns:
-        - data: DataFrame containing the selected features for the given country.
-        """
+    def load_country_data(country):
         try:
-            # Get the selected features for the country
-            features = selected_features_long[selected_features_long['Country'] == country]['Feature'].tolist()
+            # file paths
+            original_file = os.path.join(data_folder, f"data_{country}_original.csv")
+            train_file = os.path.join(data_folder, f"data_{country}_train.csv")
+            test_file = os.path.join(data_folder, f"data_{country}_test.csv")
+            predictions_file = os.path.join(data_folder, f"data_{country}_predictions.csv")
+            future_forecast_file = os.path.join(data_folder, f"data_{country}_future_forecast.csv")
 
-            # Ensure 'Economics: GDP' is included
-            if 'Economics: GDP' not in features:
-                features.append('Economics: GDP')
-
-            data_frames = []
-            for feature in features:
-                try:
-                    feature_data = data_full.xs(feature, level=1)
-                    country_feature_data = feature_data.loc[feature_data.index == country]
-                    # Transpose the data to have years as index
-                    country_feature_data = country_feature_data.T
-                    # Rename the column to the feature name
-                    country_feature_data.columns = [feature]
-                    data_frames.append(country_feature_data)
-                except Exception:
-                    continue
-
-            if not data_frames:
-                return None
-
-            # Merge the data frames on the index (years)
-            data = reduce(lambda left, right: pd.merge(left, right, left_index=True, right_index=True, how='outer'), data_frames)
-            # Convert index to integer type (years)
-            data.index = data.index.astype(int)
-            data = data.sort_index()
-
-            # Convert index to DatetimeIndex for time series analysis
-            data.index = pd.to_datetime(data.index.astype(str), format='%Y')
-
-            return data
-        except Exception:
-            return None
-
-    # Function to create lagged features
-    def create_lagged_features(data, max_lag):
-        df = data.copy()
-        cols = df.columns
-        lagged_data = []
-        for lag in range(1, max_lag + 1):
-            shifted = df.shift(lag)
-            shifted.columns = [f'{col}_lag{lag}' for col in cols]
-            lagged_data.append(shifted)
-        lagged_df = pd.concat(lagged_data, axis=1)
-        combined_df = pd.concat([df, lagged_df], axis=1).dropna()
-        X = combined_df.iloc[:, len(cols):]
-        y = combined_df.iloc[:, :len(cols)]
-        return X, y
-
-    # Cache the processed results for each country
-    @st.cache_data
-    def process_country(country):
-        """
-        Process each country using MultiTaskLassoCV.
-
-        Parameters:
-        - country: Name of the country.
-
-        Returns:
-        - result: Dictionary containing model and data information for the country.
-        """
-        try:
-            data = prepare_country_data(country)
-            if data is None:
-                return None
-
-            max_lag = 5
-            X, y = create_lagged_features(data, max_lag)
-
-            # Standardize features
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
-
-            # Train MultiTaskLassoCV model
-            model = MultiTaskLassoCV(cv=5)
-            model.fit(X_scaled, y)
-
-            # Generate future forecasts
-            forecast_steps = 10
-            forecasts = []
-            lagged_vars = X.iloc[-1].values
-
-            for step in range(forecast_steps):
-                lagged_vars_scaled = scaler.transform([lagged_vars])
-                y_pred = model.predict(lagged_vars_scaled)
-                forecasts.append(y_pred[0])
-                # Update lagged_vars with the new predictions
-                lagged_vars = np.roll(lagged_vars, -y.shape[1])
-                lagged_vars[-y.shape[1]:] = y_pred[0]
-
-            forecasts = np.array(forecasts)
-            future_years = pd.date_range(start=pd.Timestamp(data.index[-1].year + 1, 1, 1), periods=forecast_steps, freq='YS')
-            forecast_df = pd.DataFrame(forecasts, index=future_years, columns=y.columns)
-
-            # Extract GDP forecast
-            target_col = 'Economics: GDP' if 'Economics: GDP' in data.columns else 'GDP'
-            gdp_forecast = forecast_df[[target_col]].reset_index()
-            gdp_forecast.columns = ['Year', 'GDP_Forecast']
-            gdp_forecast['Country'] = country
-            gdp_forecast['Year'] = gdp_forecast['Year'].dt.year
-            gdp_forecast = gdp_forecast[['Country', 'Year', 'GDP_Forecast']]
+            # load csv files
+            original_data = pd.read_csv(original_file, index_col=0, parse_dates=True)
+            train_data = pd.read_csv(train_file, index_col=0, parse_dates=True)
+            test_data = pd.read_csv(test_file, index_col=0, parse_dates=True)
+            predictions = pd.read_csv(predictions_file, index_col=0, parse_dates=True)
+            future_forecast = pd.read_csv(future_forecast_file, index_col=0, parse_dates=True)
 
             return {
-                'Country': country,
-                'Model': model,
-                'Scaler': scaler,
-                'Lag_Order': max_lag,
-                'Data': data,
-                'Target_Col': target_col,
-                'GDP_Forecast': gdp_forecast,
-                'X': X,
-                'y': y
+                "original": original_data,
+                "train": train_data,
+                "test": test_data,
+                "predictions": predictions,
+                "future_forecast": future_forecast
             }
         except Exception as e:
-            st.error(f"{country}: Error in process_country: {e}")
+            st.error(f"Error loading data for {country}: {e}")
             return None
 
-    # Process all countries and cache the results
-    @st.cache_data
-    def process_all_countries(countries):
-        results = []
-        for country in countries:
-            result = process_country(country)
-            if result is not None:
-                results.append(result)
-        return results
+    # get available countries and sort them
+    available_countries = sorted([
+        f.split("_")[1] for f in os.listdir(data_folder) if f.endswith("_original.csv")
+    ])
 
-    # Get the processed results
-    results = process_all_countries(countries)
-
-    # Get the list of available countries
-    available_countries = [res['Country'] for res in results]
-
-    # Function to plot results and display evaluation metrics
     def plot_lasso_forecast(country, forecast_steps=5):
         try:
-            # Find the country result
-            country_result = next((res for res in results if res['Country'] == country), None)
-            if country_result is None:
-                st.warning(f"{country}: Data not available.")
+            country_data = load_country_data(country)
+            if not country_data:
+                st.warning(f"No data available for {country}.")
                 return
 
-            data = country_result['Data']
-            target_col = country_result['Target_Col']
-            model = country_result['Model']
-            scaler = country_result['Scaler']
-            max_lag = country_result['Lag_Order']
-            X = country_result['X']
-            y = country_result['y']
+            original_data = country_data["original"]
+            train_data = country_data["train"]
+            test_data = country_data["test"]
+            predictions = country_data["predictions"]
+            future_forecast = country_data["future_forecast"]
 
-            # Split data into training and testing sets
-            train_size = int(len(X) * 0.7)
-            X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
-            y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
+            target_col = "Economics: GDP" if "Economics: GDP" in original_data.columns else "GDP"
 
-            X_train_scaled = scaler.transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
+            y_test = test_data[target_col]
+            y_pred = predictions[target_col]
+            future_gdp = future_forecast[target_col]
 
-            # Predict on test set
-            y_pred = model.predict(X_test_scaled)
+            # evaluation metrics
+            mse = mean_squared_error(y_test, y_pred)
+            mae = np.mean(np.abs(y_test - y_pred))
+            r2 = 1 - np.sum((y_test - y_pred) ** 2) / np.sum((y_test - y_test.mean()) ** 2)
 
-            # Calculate evaluation metrics on test set
-            y_true = y_test[target_col].values
-            y_pred_target = y_pred[:, y.columns.get_loc(target_col)]
-            mse = mean_squared_error(y_true, y_pred_target)
-            mae = mean_absolute_error(y_true, y_pred_target)
-            r2 = r2_score(y_true, y_pred_target)
-
-            # Display evaluation metrics
             st.subheader(f"Model Evaluation for {country}")
             st.markdown(f"""
             - **Mean Squared Error (MSE):** {mse:.2e}
@@ -1250,87 +1121,364 @@ if page == "🤖 Lasso Models":
             - **R² Score:** {r2:.2f}
             """)
 
-            # Generate future forecasts
-            forecasts = []
-            lagged_vars = X.iloc[-1].values
-
-            for step in range(forecast_steps):
-                lagged_vars_scaled = scaler.transform([lagged_vars])
-                y_future_pred = model.predict(lagged_vars_scaled)
-                forecasts.append(y_future_pred[0])
-                # Update lagged_vars with the new predictions
-                lagged_vars = np.roll(lagged_vars, -y.shape[1])
-                lagged_vars[-y.shape[1]:] = y_future_pred[0]
-
-            forecasts = np.array(forecasts)
-            future_years = pd.date_range(start=pd.Timestamp(data.index[-1].year + 1, 1, 1), periods=forecast_steps, freq='YS')
-            future_forecast_df = pd.DataFrame(forecasts, index=future_years, columns=y.columns)
-
-            # Extract GDP forecast
-            forecast_gdp = future_forecast_df[[target_col]].reset_index()
-            forecast_gdp.columns = ['Year', 'Forecasted GDP']
-            forecast_gdp['Year'] = forecast_gdp['Year'].dt.year
-
-            # Plot GDP over time
             plt.figure(figsize=(12, 6))
-            plt.plot(y_train.index.year, y_train[target_col], marker='o', label='Train Data')
-            plt.plot(y_test.index.year, y_test[target_col], marker='o', label='Test Data')
-            plt.plot(y_test.index.year, y_pred_target, marker='o', linestyle='--', label='Lasso Model Predictions')
-            plt.plot(forecast_gdp['Year'], forecast_gdp['Forecasted GDP'], marker='o', linestyle='--', label='Future GDP Forecast')
-            plt.title(f'{country} GDP with Lasso Model Predictions and Forecast')
-            plt.xlabel('Year')
-            plt.ylabel('GDP (USD)')
+            plt.plot(train_data.index.year, train_data[target_col], marker="o", label="Train Data")
+            plt.plot(test_data.index.year, y_test, marker="o", label="Test Data")
+            plt.plot(predictions.index.year, y_pred, marker="o", linestyle="--", label="Predictions")
+            plt.plot(future_forecast.index.year[:forecast_steps], future_gdp[:forecast_steps], marker="o", linestyle="--", label="Forecasts")
+            plt.title(f"{country} GDP with LASSO Model Predictions and Forecast")
+            plt.xlabel("Year")
+            plt.ylabel("GDP (USD)")
             plt.legend()
             plt.grid(True)
             st.pyplot(plt.gcf())
             plt.clf()
 
-            # Calculate prediction errors
-            errors = y_true - y_pred_target
-
-            # Plot prediction errors
+            # errors
+            errors = y_test - y_pred
             plt.figure(figsize=(12, 4))
-            plt.bar(y_test.index.year, errors, color='orange')
-            plt.title(f'{country} Prediction Errors (Test Data - Predictions)')
-            plt.xlabel('Year')
-            plt.ylabel('Error (USD)')
+            plt.bar(test_data.index.year, errors, color="orange")
+            plt.title(f"{country} Prediction Errors (Test Data - Predictions)")
+            plt.xlabel("Year")
+            plt.ylabel("Error (USD)")
             plt.grid(True)
             st.pyplot(plt.gcf())
             plt.clf()
 
-            # # Plot future GDP forecast
-            # plt.figure(figsize=(12, 4))
-            # plt.plot(forecast_gdp['Year'], forecast_gdp['Forecasted GDP'], marker='o', linestyle='--', label='Future GDP Forecast')
-            # plt.title(f'{country} Future GDP Forecast')
-            # plt.xlabel('Year')
-            # plt.ylabel('GDP')
-            # plt.legend()
-            # plt.grid(True)
-            # st.pyplot(plt.gcf())
-            # plt.clf()
-
         except Exception as e:
             st.error(f"{country}: Plot failed. Error: {e}")
 
-    # Page title and description
-    st.title("Lasso Model Analysis 🤖")
-    st.write("Analyze GDP forecasting using Lasso regression models.")
+    st.title("LASSO Model Analysis")
+    st.write("Initially, I used a relatively simple VAR model, but it faced overfitting issues and was highly sensitive. I tried manually adjusting features, coefficients, and normalization, but none were effective. However, after switching to LASSO regression, the performance improved significantly, and it also simplified my code.")
 
-    # Sidebar country selector
-    default_country = 'United States' if 'United States' in available_countries else available_countries[0]
+    st.subheader("What is LASSO Model")
+    st.write("Assume we have 2 features, the Residual Sum of Squares (RSS) of Linear Regression model will look like this:")
+    st.write(r"$RSS = (y_1 - \beta_1 x_{1,1} - \beta_2 x_{1,2})^2 + (y_2- \beta_1 x_{2,1} - \beta_2 x_{2,2})^2 $")
+    st.write("LASSO regression adds a penalty term to the RSS:")
+    st.write(r"$RSS_{LASSO} = RSS + \lambda (\beta_1+\beta_2)$")
+    st.write("This means that the coefficients directly increase the penalty on errors. If a corresponding feature does not contribute significantly to the results, its coefficient tends to decrease.")
+    st.caption(r"$y$ is the linear regression output, $x$ is the feature, $\beta$ is the feature coefficient, and $\lambda$ is the penalty parameter.")
+
+    default_country = "United States" if "United States" in available_countries else available_countries[0]
     selected_country = st.sidebar.selectbox("Select a country", available_countries, index=available_countries.index(default_country))
 
-    # Sidebar forecast steps
     forecast_steps = st.sidebar.slider("Select number of forecast steps", min_value=1, max_value=10, value=5)
 
-    # Plot Lasso forecast and display evaluation metrics
     plot_lasso_forecast(selected_country, forecast_steps=forecast_steps)
+
+    st.subheader('Interesting Findings')
+    st.write('Good news! The LASSO model has significantly reduced errors and shows notable improvement in addressing the two issues encountered by the AR model.')
+    st.write('Although the "2020 forecasting nightmare" cannot be entirely avoided in the test set, predictions for the coming years will be noticeably more reliable. Additionally, the forecasts for developing countries will no longer be overly optimistic.')
 
 # Page 7: Other Models
 if page == "🤖 Other Models":
+
+    # Load data with caching to improve performance
+    @st.cache_data
+    def load_data():
+        url = 'data_imputation_full.csv'
+        data_full = pd.read_csv(url, index_col=[0, 1])
+        return data_full
+
+    data_full = load_data()
+
+    # Define variables for per capita and total models
+    gdp_model_per_capita_vars = [
+        'Economics: GDP',
+        'Electricity: Distribution Losses Per Capita',
+        'Electricity: Exports Per Capita',
+        'Electricity: Imports Per Capita',
+        'Electricity: Installed Capacity Per Capita',
+        'Electricity: Net Consumption Per Capita',
+        'Electricity: Net Generation Per Capita',
+        'Electricity: Net Imports Per Capita',
+        'Population: Area (km²)',
+        'Population: Density', 
+        'Population: Growth Rate',
+        'Population: Percentage', 
+        'Population: Population'
+    ]
+
+    gdp_model_total_vars = [
+        'Economics: GDP',
+        'Electricity: Distribution Losses',
+        'Electricity: Exports',
+        'Electricity: Imports',
+        'Electricity: Installed Capacity',
+        'Electricity: Net Consumption',
+        'Electricity: Net Generation',
+        'Electricity: Net Imports',
+        'Population: Area (km²)',
+        'Population: Density', 
+        'Population: Growth Rate',
+        'Population: Percentage', 
+        'Population: Population'
+    ]
+
+    # Filter and reshape data for per capita and total models
+    def prepare_data(variables):
+        data = data_full.loc[data_full.index.get_level_values(1).isin(variables)]
+        data = data.stack().reset_index()
+        data.columns = ['Country', 'Variable', 'Year', 'Value']
+        data = data.pivot_table(index=['Country', 'Year'], columns='Variable', values='Value').reset_index()
+        return data
+
+    gdp_model_per_capita_data = prepare_data(gdp_model_per_capita_vars)
+    gdp_model_total_data = prepare_data(gdp_model_total_vars)
+
+    # Standardize the data
+    features_per_capita = gdp_model_per_capita_data.columns.difference(['Country', 'Year'])
+    features_total = gdp_model_total_data.columns.difference(['Country', 'Year'])
+
+    scaler = StandardScaler()
+    gdp_model_per_capita_scaled = scaler.fit_transform(gdp_model_per_capita_data[features_per_capita])
+    gdp_model_total_scaled = scaler.fit_transform(gdp_model_total_data[features_total])
+
+    # Perform PCA on both models
+    pca_per_capita = PCA()
+    principal_components_per_capita = pca_per_capita.fit_transform(gdp_model_per_capita_scaled)
+
+    pca_total = PCA()
+    principal_components_total = pca_total.fit_transform(gdp_model_total_scaled)
+
+    # Convert PCA results to DataFrames for plotting and analysis
+    pca_gdp_model_per_capita_df = pd.DataFrame(data=principal_components_per_capita,
+                                            columns=[f'PC{i+1}' for i in range(principal_components_per_capita.shape[1])])
+
+    pca_gdp_model_total_df = pd.DataFrame(data=principal_components_total,
+                                        columns=[f'PC{i+1}' for i in range(principal_components_total.shape[1])])
+
+    # Visualize cumulative explained variance with scree plots
     st.title("Other Models")
+    st.write('Apart from building forecasting models for individual countries, we can also establish global forecasting models. However, for a linear regression model, would predicting per capita GDP be more accurate than predicting total GDP? What about other, more complex models?')
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    st.subheader("Dimensionality Reduction and Normalization")
+    st.write('Before training the model, I performed some basic PCA operations to make the features more distinct and to prevent the characteristics of economically developed countries from overshadowing those of other countries.')
+
+    # Per Capita Model Scree Plot
+    explained_variance_ratio_pc = pca_per_capita.explained_variance_ratio_
+    cumulative_variance_ratio_pc = np.cumsum(explained_variance_ratio_pc)
+
+    axes[0].plot(range(1, len(explained_variance_ratio_pc) + 1), explained_variance_ratio_pc, 'bo-', label='Individual')
+    axes[0].plot(range(1, len(cumulative_variance_ratio_pc) + 1), cumulative_variance_ratio_pc, 'ro-', label='Cumulative')
+    axes[0].set_xlabel('Principal Component')
+    axes[0].set_ylabel('Proportion of Variance Explained')
+    axes[0].set_title('Per Capita Model Scree Plot')
+    # axes[0].legend()
+    axes[0].grid(True)
+
+    # marker
+    point_index = 4
+    x_point = point_index + 1
+    y_point = cumulative_variance_ratio_pc[point_index]
+    axes[0].scatter(x_point, y_point, color='orange', s=100, label='Elbow')
+    axes[0].annotate(f'PC{x_point}: {y_point:.2f}', 
+                    (x_point, y_point), 
+                    textcoords="offset points", 
+                    xytext=(0, 20), 
+                    ha='center', 
+                    fontsize=10, 
+                    color='orange')
+    axes[0].legend()
+
+    # Total Model Scree Plot
+    explained_variance_ratio_total = pca_total.explained_variance_ratio_
+    cumulative_variance_ratio_total = np.cumsum(explained_variance_ratio_total)
+
+    axes[1].plot(range(1, len(explained_variance_ratio_total) + 1), explained_variance_ratio_total, 'bo-', label='Individual')
+    axes[1].plot(range(1, len(cumulative_variance_ratio_total) + 1), cumulative_variance_ratio_total, 'ro-', label='Cumulative')
+    axes[1].set_xlabel('Principal Component')
+    axes[1].set_ylabel('Proportion of Variance Explained')
+    axes[1].set_title('Total Model Scree Plot')
+    # axes[1].legend()
+    axes[1].grid(True)
+
+    # marker
+    point_index = 3
+    x_point = point_index + 1
+    y_point = cumulative_variance_ratio_total[point_index]
+    axes[1].scatter(x_point, y_point, color='orange', s=100, label='Elbow')
+    axes[1].annotate(f'PC{x_point}: {y_point:.2f}', 
+                    (x_point, y_point), 
+                    textcoords="offset points", 
+                    xytext=(2, 18), 
+                    ha='center', 
+                    fontsize=10, 
+                    color='orange')
+    axes[1].legend()
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    # Select the first few principal components for modeling
+    pc_per_capita_selected = pca_gdp_model_per_capita_df.iloc[:, :5]
+    pc_total_selected = pca_gdp_model_total_df.iloc[:, :4]
+
+    # Split the data into training and testing sets for both models
+    y_per_capita = gdp_model_per_capita_data['Economics: GDP'].reset_index(drop=True)
+    y_total = gdp_model_total_data['Economics: GDP'].reset_index(drop=True)
+
+    X_train_pc, X_test_pc, y_train_pc, y_test_pc = train_test_split(
+        pc_per_capita_selected, y_per_capita, test_size=0.2, random_state=42)
+
+    X_train_total, X_test_total, y_train_total, y_test_total = train_test_split(
+        pc_total_selected, y_total, test_size=0.2, random_state=42)
+
+    # Train Linear Regression and Random Forest models
+    # Linear Regression - Per Capita Model
+    lr_pc = LinearRegression()
+    lr_pc.fit(X_train_pc, y_train_pc)
+    y_pred_pc = lr_pc.predict(X_test_pc)
+
+    # Linear Regression - Total Model
+    lr_total = LinearRegression()
+    lr_total.fit(X_train_total, y_train_total)
+    y_pred_total = lr_total.predict(X_test_total)
+
+    # Evaluate Linear Regression models
+    mse_pc = mean_squared_error(y_test_pc, y_pred_pc)
+    r2_pc = r2_score(y_test_pc, y_pred_pc)
+
+    mse_total = mean_squared_error(y_test_total, y_pred_total)
+    r2_total = r2_score(y_test_total, y_pred_total)
+
+    # Display results for Linear Regression models
+    st.subheader("Linear Regression Model Evaluation")
+    st.markdown(f"""
+    - **Per Capita Model**:
+    - Mean Squared Error (MSE): {mse_pc:.2e}
+    - R² Score: {r2_pc:.2f}
+    
+    - **Total Model**:
+    - Mean Squared Error (MSE): {mse_total:.2e}
+    - R² Score: {r2_total:.2f}
+    """)
+    def plot_linear_regression_comparison():
+
+        models = ['Per Capita (LR)', 'Total (LR)']
+        mse_values = [mse_pc, mse_total]
+        r2_values = [r2_pc, r2_total]
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+        axes[0].bar(models, mse_values, color=['#1f77b4', '#ff7f0e'])
+        axes[0].set_title('MSE Comparison')
+        axes[0].set_ylabel('MSE (Log Scale)')
+        axes[0].set_yscale('log')
+        axes[0].grid(axis='y', linestyle='--', alpha=0.7)
+
+        axes[1].bar(models, r2_values, color=['#1f77b4', '#ff7f0e'])
+        axes[1].set_title('R² Score Comparison')
+        axes[1].set_ylabel('R² Score')
+        axes[1].set_ylim([0.4, 1])
+        axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+
+        plt.tight_layout()
+
+        st.pyplot(fig)
+
+    plot_linear_regression_comparison()
+
+    # Train Random Forest models
+    # Random Forest - Per Capita Model
+    rf_pc = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf_pc.fit(X_train_pc, y_train_pc)
+    y_pred_pc_rf = rf_pc.predict(X_test_pc)
+
+    # Random Forest - Total Model
+    rf_total = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf_total.fit(X_train_total, y_train_total)
+    y_pred_total_rf = rf_total.predict(X_test_total)
+
+    # Evaluate Random Forest models
+    mse_pc_rf = mean_squared_error(y_test_pc, y_pred_pc_rf)
+    r2_pc_rf = r2_score(y_test_pc, y_pred_pc_rf)
+
+    mse_total_rf = mean_squared_error(y_test_total, y_pred_total_rf)
+    r2_total_rf = r2_score(y_test_total, y_pred_total_rf)
+
+    # Display results for Random Forest models
+    st.subheader("Random Forest Model Evaluation")
+    st.markdown(f"""
+    - **Per Capita Model**:
+    - Mean Squared Error (MSE): {mse_pc_rf:.2e}
+    - R² Score: {r2_pc_rf:.2f}
+    
+    - **Total Model**:
+    - Mean Squared Error (MSE): {mse_total_rf:.2e}
+    - R² Score: {r2_total_rf:.2f}
+    """)
+
+    def plot_random_forest_comparison():
+        models = ['Per Capita (RF)', 'Total (RF)']
+        mse_values_rf = [mse_pc_rf, mse_total_rf]
+        r2_values_rf = [r2_pc_rf, r2_total_rf]
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+        axes[0].bar(models, mse_values_rf, color=['#2ca02c', '#d62728'])
+        axes[0].set_title('MSE Comparison')
+        axes[0].set_ylabel('MSE (Log Scale)')
+        axes[0].set_yscale('log')
+        axes[0].grid(axis='y', linestyle='--', alpha=0.7)
+
+        axes[1].bar(models, r2_values_rf, color=['#2ca02c', '#d62728'])
+        axes[1].set_title('R² Score Comparison')
+        axes[1].set_ylabel('R² Score')
+        axes[1].set_ylim([0.9, 1])
+        axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    plot_random_forest_comparison()
+
+
+    # Comparison between Linear Regression and Random Forest models
+    st.subheader("Model Comparison Summary")
+    st.markdown(f"""
+    From the perspective of the linear regression model, predicting GDP shows a better fit. If per capita GDP needs to be predicted, it may be more accurate to first predict GDP and then calculate it manually.  
+
+    Using a more advanced random forest model, the fit is excellent across the board. This indicates that the feature selection is relatively sound, and with an appropriate model, highly accurate predictions can be achieved.
+    """)
 
 # Page 8: Summary (Final)
 elif page == "🤖 Summary (Final)":
     st.title("Summary")
+    st.write(f"""
+    I presented four models, which can be grouped into two categories based on their functionality for discussion.
+             
+    ### Batch Training for 170 Countries:
+    
+    **AR Model:**
+             
+    Pros:
+    - Requires very little data.
+    - Extremely low computational cost.
+    - Almost no data preprocessing is needed.
+             
+    Cons:
+    - Poor resistance to data fluctuations.
+    - A purely mathematical model with no consideration of objective realities. For instance, for countries experiencing rapid economic growth, the model assumes they will continue to grow at the same high rate indefinitely.
+    
+    **LASSO Model:**
+             
+    Pros:
+
+    - Reduces model distortion caused by inaccurate manual feature selection.
+    - Significantly improves model accuracy at a relatively low cost of increased model complexity.
+    
+    Cons:
+
+    - Feature coefficient selection drastically increases computational demands, requiring advanced programming skills, including parallel computing.
+    - Handling parameters becomes more complicated, although existing libraries simplify this issue.
+    
+    ### Global Unified Model Training:
+
+    For models based on linear regression, the precision of the per capita GDP model was significantly lower than that of the total GDP model. Although this result differed from my expectations, it raises a hypothesis: could less processed target data help improve accuracy?
+
+    As for the random forest regression, I do not have a deep understanding of its mechanisms. It mainly serves as a comparison to linear regression, demonstrating that electricity and population data can indeed effectively predict economic data.
+             """)
+
 
