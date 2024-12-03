@@ -36,7 +36,8 @@ page = st.sidebar.selectbox("Choose a page", ["✅ Overview", "📊 Data Analysi
 if page == "✅ Overview":
     st.title("Overview")
     st.write("## Predicting Economic Data Using Electricity and Population Data")
-    st.write("The main goal:")
+    st.write('Recently, an AI team proposed the idea of using dedicated nuclear power plants to supply energy for AI training—a concept that sounds almost crazy. Yet, many of our activities heavily depend on electricity. This raises an intriguing question: could we use electricity data to predict certain aspects of human activity, such as a highly representative parameter—GDP?')
+    st.write("### The main goal of this project:")
     st.write("1) Explore the correlation between global economic data and electricity data to identify the representative features.")
     st.write("2) Train individual AR and LASSO models for each country, and attempt to forecast GDP for the coming years.")
 
